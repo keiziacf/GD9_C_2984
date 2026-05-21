@@ -1,10 +1,23 @@
 import { Revenue } from './definitions';
 
+const avatarImageMap: Record<string, string> = {
+  '/customers/evil-rabbit.png': '/customers/rabbit-cartoon.svg',
+  '/customers/delba-de-oliveira.png': '/customers/cat-cartoon.svg',
+  '/customers/lee-robinson.png': '/customers/fox-cartoon.svg',
+  '/customers/michael-novotny.png': '/customers/bear-cartoon.svg',
+  '/customers/amy-burns.png': '/customers/owl-cartoon.svg',
+  '/customers/balazs-orban.png': '/customers/turtle-cartoon.svg',
+};
+
 export const formatCurrency = (amount: number) => {
   return (amount / 100).toLocaleString('en-US', {
     style: 'currency',
     currency: 'USD',
   });
+};
+
+export const getAvatarImage = (imageUrl: string) => {
+  return avatarImageMap[imageUrl] ?? imageUrl;
 };
 
 export const formatDateToLocal = (

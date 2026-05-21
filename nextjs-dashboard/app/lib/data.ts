@@ -14,10 +14,65 @@ import {
   customers as placeholderCustomers,
   revenue as placeholderRevenue,
 } from './placeholder-data';
+import {
+  fetchLocalCardData,
+  fetchLocalCustomerFields,
+  fetchLocalCustomers,
+  fetchLocalFilteredInvoices,
+  fetchLocalInvoiceById,
+  fetchLocalInvoicesPages,
+  fetchLocalLatestInvoices,
+} from './local-store';
 
-const sql: any = process.env.POSTGRES_URL
-  ? postgres(process.env.POSTGRES_URL, { ssl: 'require' })
-  : undefined;
+let sqlClient: ReturnType<typeof postgres> | null = null;
+
+function getSql() {
+  if (!process.env.POSTGRES_URL) {
+    return null;
+  }
+
+  if (!sqlClient) {
+    sqlClient = postgres(process.env.POSTGRES_URL, { ssl: 'require' });
+  }
+
+  return sqlClient;
+}
+
+function getFilteredPlaceholderInvoices(query: string): InvoicesTable[] {
+  const normalizedQuery = query.toLowerCase();
+
+  return placeholderInvoices
+    .map((invoice, index) => {
+      const customer = placeholderCustomers.find(
+        (item) => item.id === invoice.customer_id,
+      );
+
+      return {
+        id: `${invoice.customer_id}-${invoice.date}-${index}`,
+        customer_id: invoice.customer_id,
+        name: customer?.name ?? 'Unknown Customer',
+        email: customer?.email ?? 'unknown@example.com',
+        image_url: customer?.image_url ?? '/customers/rabbit-cartoon.svg',
+        date: invoice.date,
+        amount: invoice.amount,
+        status: invoice.status as InvoicesTable['status'],
+      };
+    })
+    .filter((invoice) => {
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      return (
+        invoice.name.toLowerCase().includes(normalizedQuery) ||
+        invoice.email.toLowerCase().includes(normalizedQuery) ||
+        invoice.amount.toString().includes(normalizedQuery) ||
+        invoice.date.toLowerCase().includes(normalizedQuery) ||
+        invoice.status.toLowerCase().includes(normalizedQuery)
+      );
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
 
 function getLatestPlaceholderInvoices(): LatestInvoice[] {
   return [...placeholderInvoices]
@@ -32,13 +87,15 @@ function getLatestPlaceholderInvoices(): LatestInvoice[] {
         id: `${invoice.customer_id}-${invoice.date}-${index}`,
         name: customer?.name ?? 'Unknown Customer',
         email: customer?.email ?? 'unknown@example.com',
-        image_url: customer?.image_url ?? '/customers/evil-rabbit.png',
+        image_url: customer?.image_url ?? '/customers/rabbit-cartoon.svg',
         amount: formatCurrency(invoice.amount),
       };
     });
 }
 
-export async function fetchRevenue() {
+export async function fetchRevenue(): Promise<Revenue[]> {
+  const sql = getSql();
+
   if (!sql) {
     return placeholderRevenue;
   }
@@ -62,8 +119,10 @@ export async function fetchRevenue() {
 }
 
 export async function fetchLatestInvoices() {
+  const sql = getSql();
+
   if (!sql) {
-    return getLatestPlaceholderInvoices();
+    return fetchLocalLatestInvoices();
   }
 
   try {
@@ -86,26 +145,10 @@ export async function fetchLatestInvoices() {
 }
 
 export async function fetchCardData() {
-  if (!sql) {
-    const numberOfInvoices = placeholderInvoices.length;
-    const numberOfCustomers = placeholderCustomers.length;
-    const totalPaidInvoices = formatCurrency(
-      placeholderInvoices
-        .filter((invoice) => invoice.status === 'paid')
-        .reduce((sum, invoice) => sum + invoice.amount, 0),
-    );
-    const totalPendingInvoices = formatCurrency(
-      placeholderInvoices
-        .filter((invoice) => invoice.status === 'pending')
-        .reduce((sum, invoice) => sum + invoice.amount, 0),
-    );
+  const sql = getSql();
 
-    return {
-      numberOfCustomers,
-      numberOfInvoices,
-      totalPaidInvoices,
-      totalPendingInvoices,
-    };
+  if (!sql) {
+    return fetchLocalCardData();
   }
 
   try {
@@ -148,6 +191,11 @@ export async function fetchFilteredInvoices(
   currentPage: number,
 ) {
   const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+  const sql = getSql();
+
+  if (!sql) {
+    return fetchLocalFilteredInvoices(query, currentPage, ITEMS_PER_PAGE);
+  }
 
   try {
     const invoices = (await sql<InvoicesTable[]>`
@@ -179,6 +227,12 @@ export async function fetchFilteredInvoices(
 }
 
 export async function fetchInvoicesPages(query: string) {
+  const sql = getSql();
+
+  if (!sql) {
+    return fetchLocalInvoicesPages(query, ITEMS_PER_PAGE);
+  }
+
   try {
     const data = await sql`SELECT COUNT(*)
     FROM invoices
@@ -200,6 +254,12 @@ export async function fetchInvoicesPages(query: string) {
 }
 
 export async function fetchInvoiceById(id: string) {
+  const sql = getSql();
+
+  if (!sql) {
+    return fetchLocalInvoiceById(id);
+  }
+
   try {
     const data = await sql<InvoiceForm[]>`
       SELECT
@@ -225,6 +285,12 @@ export async function fetchInvoiceById(id: string) {
 }
 
 export async function fetchCustomers() {
+  const sql = getSql();
+
+  if (!sql) {
+    return fetchLocalCustomerFields();
+  }
+
   try {
     const customers = await sql<CustomerField[]>`
       SELECT
@@ -242,6 +308,12 @@ export async function fetchCustomers() {
 }
 
 export async function fetchFilteredCustomers(query: string) {
+  const sql = getSql();
+
+  if (!sql) {
+    return fetchLocalCustomers(query);
+  }
+
   try {
     const data = (await sql<CustomersTableType[]>`
 		SELECT
